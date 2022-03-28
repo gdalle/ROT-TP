@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.2
+# v0.18.4
 
 using Markdown
 using InteractiveUtils
@@ -9,9 +9,10 @@ begin
 	using Graphs
 	using Ipopt
 	using JuMP
-	using MetaGraphsNext
 	using PlutoUI
 	using Plots
+	using ProgressLogging
+	using SparseArrays
 end
 
 # ╔═╡ a544ef87-05d9-4bda-9e93-551903b4b993
@@ -19,18 +20,29 @@ PlutoUI.TableOfContents()
 
 # ╔═╡ bc43ebee-2ed0-4255-bf2b-3352e53b5d92
 md"""
-# Mathematical preliminaries
+# Preliminaries
+"""
+
+# ╔═╡ 67a5a5d1-e9b2-4800-a71e-a8f631d480f3
+md"""
+## Notations
 """
 
 # ╔═╡ c546cd21-700f-4c2a-931b-9647b345b454
 md"""
 Consider a (finite) directed graph $G=(V,E)$ endowed with $K$ origin-destination vertex pairs $(o^k,d^k)_{k\in [1,K]}$. Let us denote by:
 
-- ``r^k`` the (continuous) flow of users entering the network in ``o^k`` and exiting in ``d^k``, which is fixed;
+- ``r^k`` the (continuous) flow of users entering the network in ``o^k`` and exiting in ``d^k`` (which is fixed);
 - ``\mathcal{P}_k`` the set of all simple paths from ``o^k`` to ``d^k``, and ``\mathcal{P} = \bigcup_{k=1}^K \mathcal{P}_k``;
 - ``f_p`` the flow of users taking path ``p \in \mathcal{P}``, and ``f = (f_p)_{p\in\mathcal{P}}``;
 - ``x_e`` the flow of users taking edge ``e \in E``, and ``x = (x_e)_{e\in E}``;
-- ``\ell_e(x_e)`` the cost paid by a user taking edge ``e`` when the edge flow is ``x_e``, and ``L_e(x_e) := \int_0^{x_e}\ell_e(u) \mathrm{d}u``.
+- ``\ell_e(x_e)`` the cost paid by a user taking edge ``e`` when the edge flow is ``x_e``
+- ``L_e(x_e) = \int_0^{x_e}\ell_e(u) \mathrm{d}u``.
+"""
+
+# ╔═╡ 304456e3-8ddd-496e-80aa-4df3e46d772c
+md"""
+## Optimization problems
 """
 
 # ╔═╡ de311c92-b521-404a-b42c-e39fdfbfae63
@@ -69,6 +81,11 @@ s.t. \quad
 where the only difference with $(P^{SO})$ is the objective function.
 """
 
+# ╔═╡ 59128377-7a05-4b40-9a1b-91cea30d7a5b
+md"""
+## Price of anarchy
+"""
+
 # ╔═╡ 927b5dde-31fd-4b3c-bb38-346f013673e5
 md"""
 Let $C(x)=\sum_{e\in E}x_e \ell_e(x_e)$ be the total cost associated with the admissible flow $x$.
@@ -80,16 +97,16 @@ PoA = \frac{C(x^{UE})}{C(x^{SO})} \geq 1
 ```
 """
 
+# ╔═╡ b4ed607f-af8d-49fe-b19e-a207083245a9
+md"""
+# Model reformulation
+"""
+
 # ╔═╡ a7b1d5df-9c7c-4ee0-90a5-f41d94c32dad
 md"""
 ## Question 1
 
 Prove that if the cost function $\ell_e$ is constant for every edge $e$, then the social optimum and the user equilibrium are equivalent.
-"""
-
-# ╔═╡ 95fbe82f-0f7e-40ed-acbd-70e26c9e2a59
-md"""
-
 """
 
 # ╔═╡ 1a2e2b25-8103-4c64-863a-bab9377531c1
@@ -104,21 +121,11 @@ How many variables and constraints are there in the problems $(P^{SO})$ and $(P^
 Don't count positivity constraints.
 """
 
-# ╔═╡ 7c9db9af-5511-44bf-96a3-43fa1187ebe9
-md"""
-
-"""
-
 # ╔═╡ f6db4c0a-a17c-4996-82d8-91bf1decd492
 md"""
 ## Question 3
 
 Rewrite both $(P^{SO})$ and $(P^{UE})$ using only the vector $f$.
-"""
-
-# ╔═╡ 64a87650-3601-42e1-bd35-ff4227afe651
-md"""
-
 """
 
 # ╔═╡ 9be537f0-9740-4af6-9367-6db7f99ae89e
@@ -128,11 +135,6 @@ md"""
 Assume that there is only one origin-destination pair $(o, d)$.
 Rewrite both problems using only the vector $x$.
 We can use, for any vertex $v$ the notation $\delta^-(v)$ for the set of edges with destination $v$, and $\delta^+(v)$ for the set of edges with origin $v$.
-"""
-
-# ╔═╡ 2e2d25d8-aff5-490d-b774-73132df80932
-md"""
-
 """
 
 # ╔═╡ e9072bbe-439c-4939-92fd-9ba80a4856d0
@@ -153,11 +155,6 @@ Thus, each column of $N$ corresponds to an edge, and indicates its origin with a
 
 If $K=1$, what is the interpretation of each coordinate of the vector $Nx$ ? 
 Deduce a more compact formulation of both problems using only the vector $x$.
-"""
-
-# ╔═╡ a0ee0bc1-79a4-4bc4-9438-4c2e26a50001
-md"""
-
 """
 
 # ╔═╡ 600475b1-d054-48ac-b162-b28af92b713b
@@ -182,7 +179,7 @@ end
 
 # ╔═╡ 3e7e2935-5d7a-4072-a5b2-305ec7722afa
 md"""
-Each edge $e$ must contain the cost function $\ell_e$, which we take to be linear: $\ell_e(x_e) = a x_e + b$.
+Each edge $e$ must contain the cost function $\ell_e$, which we take to be linear: $\ell_e(x_e) = a_e x_e + b_e$.
 """
 
 # ╔═╡ f10a9ab7-14d5-4a34-a208-f64496262b2f
@@ -223,10 +220,15 @@ function add_edge_with_data!(network::Network, s, d; a, b)
 	return true
 end
 
+# ╔═╡ 315c0821-442d-4a20-ac42-1442e1f37142
+md"""
+Since we know that the incidence matrix $N$ is sparse (with few non-zero coefficients), a dedicated structure allows for faster computations.
+"""
+
 # ╔═╡ eaeef73e-846f-4da9-9510-52f38bcf0976
 function build_incidence_matrix(network::Network)
 	G = network.G
-    N = zeros(Int,(nv(G), ne(G)))
+    N = spzeros(Int,(nv(G), ne(G)))
     for (j, e) in enumerate(edges(G))
 		s, d = src(e), dst(e)
         N[s, j] = -1 
@@ -262,17 +264,22 @@ end
 
 # ╔═╡ f78a3ac2-c2ae-4e0f-9538-27ed72105c05
 md"""
-## Optimization problem
+## Optimization
+"""
+
+# ╔═╡ e26709a3-3e44-4b8b-9c03-6cdd720144c7
+md"""
+To solve nonlinear optimization problems, we will use the [JuMP.jl](https://jump.dev/JuMP.jl/stable/) package with the Ipopt backend.
 """
 
 # ╔═╡ 29c0a166-0aaa-4cbb-8f5c-69f5f5c03e00
-function solve_optimization(network::Network; goal=:social_optimum)
+function solve_optimization(network::Network; goal)
 	G = network.G
 	vertex_data = network.vertex_data
 	edge_data = network.edge_data
 
     model = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0))
-    
+
     @variable(model, x[1:ne(G)] >= 0)
     @variable(model, edge_costs[1:ne(G)])
 	
@@ -313,13 +320,13 @@ function social_cost(network::Network, x)
 end
 
 # ╔═╡ 427e627e-cc6c-4fb0-9f54-f89d7827791e
-function price_of_anarchy(network::Network)
+function price_of_anarchy(network::Network; verbose=true)
 	x_so = solve_optimization(network; goal=:social_optimum)
 	x_ue = solve_optimization(network; goal=:user_equilibrium)
 	C_so = social_cost(network, x_so)
 	C_ue = social_cost(network, x_ue)
 	poa = C_ue / C_so
-	@info "User equilibrium: $x_ue"
+	verbose && @info "User equilibrium: $x_ue"
 	return poa
 end
 
@@ -329,7 +336,7 @@ md"""
 """
 
 # ╔═╡ 68411bd0-bbbd-4058-beca-103fc9e79e75
-function braess_network()
+function diamond_network()
 	network = Network()
 
 	add_vertex_with_data!(network, inflow=1)
@@ -345,57 +352,237 @@ function braess_network()
 	return network
 end
 
+# ╔═╡ bae0d516-6db6-4d41-9e3c-ce89d4e9dfaa
+md"""
+## Question 6
+
+Compute the price of anarchy in a diamond network. Comment the result.
+"""
+
 # ╔═╡ 50ac4e5d-11cb-4caa-b0dd-dabad26d87d6
-network1 = braess_network()
+network6 = diamond_network()
 
 # ╔═╡ fd786978-3ea2-482f-80c5-604c72decbe4
-plot_network(network1, vx=[0, 1, 1, 2], vy=[0, 1, -1, 0])
+plot_network(network6, vx=[0, 1, 1, 2], vy=[0, 1, -1, 0])
 
 # ╔═╡ 82dd92aa-d117-4088-abfb-dd7f5dfaa305
-x_so = solve_optimization(network1; goal=:social_optimum)
+x_so = solve_optimization(network6; goal=:social_optimum)
 
 # ╔═╡ 17c2368a-d2d1-4fda-a1f6-aeb45b84853e
-x_ue = solve_optimization(network1; goal=:user_equilibrium)
+x_ue = solve_optimization(network6; goal=:user_equilibrium)
 
 # ╔═╡ 30231615-1b22-4a26-a0a8-5900ac98d7e9
-social_cost(network1, x_so)
+social_cost(network6, x_so)
 
 # ╔═╡ 5d1f806a-b9f6-405e-bc0b-baddeec76613
-social_cost(network1, x_ue)
+social_cost(network6, x_ue)
 
 # ╔═╡ 3fa1fbc8-f675-4f9a-ab0b-15a1521a614a
-price_of_anarchy(network1)
+price_of_anarchy(network6)
+
+# ╔═╡ 0e0a3d5b-fcc1-46f2-be12-3e9333e5c9bc
+md"""
+## Question 7
+
+- Add one edge form node $2$ to $3$ with null cost. Compute the price of anarchy.
+- Add one edge form node $3$ to $2$ with null cost. Compute the price of anarchy.
+- Add both edges. Compute the price of anarchy.
+- Look at the intensities you obtain, and comment the result.
+"""
 
 # ╔═╡ 62d58c18-312e-4572-acad-9efb00b43a94
 begin
-	network2 = braess_network()
-	add_edge_with_data!(network2, 2, 3, a=0, b=0)
+	network7a = diamond_network()
+	add_edge_with_data!(network7a, 2, 3, a=0, b=0)
 end
 
-# ╔═╡ a00ca5f9-df62-42e7-804c-ea8f63a9aa9e
-plot_network(network2, vx=[0, 1, 1, 2], vy=[0, 1, -1, 0])
-
-# ╔═╡ e1fe6274-aabd-4fd3-a04a-39e293678e23
-price_of_anarchy(network2)
+# ╔═╡ d95c1cf4-5cbf-483d-9927-ae523ede6dc5
+begin
+	network7b = diamond_network()
+	add_edge_with_data!(network7b, 3, 2, a=0, b=0)
+end
 
 # ╔═╡ afd6c239-00cc-415c-b225-ec70105fd5bb
 begin
-	network3 = braess_network()
-	add_edge_with_data!(network3, 3, 2, a=0, b=0)
+	network7c = diamond_network()
+	add_edge_with_data!(network7c, 2, 3, a=0, b=0)
+	add_edge_with_data!(network7c, 3, 2, a=0, b=0)
 end
+
+# ╔═╡ a223b9f7-d972-41fb-a931-8f40e5fed498
+price_of_anarchy(network7a)
 
 # ╔═╡ 468e1a8a-d906-4b8f-8399-7a733485058d
-price_of_anarchy(network3)
-
-# ╔═╡ 25e0cf3d-b598-4d14-b789-ef25fa3ae454
-begin
-	network4 = braess_network()
-	add_edge_with_data!(network4, 2, 3, a=0, b=0)
-	add_edge_with_data!(network4, 3, 2, a=0, b=0)
-end
+price_of_anarchy(network7b)
 
 # ╔═╡ c25c4e8b-1fa5-44b5-9cdc-fdbda681fbf3
-price_of_anarchy(network4)
+price_of_anarchy(network7c)
+
+# ╔═╡ 7d3c6b05-6449-4ca0-bc0c-2acccdce6584
+md"""
+# Variants
+"""
+
+# ╔═╡ 4f827a72-49e7-43e0-9745-c63bdbf29c4b
+md"""
+## Question 8
+
+Create another version of the previous graph (the one with $6$ edges), in which the constant cost functions $\ell_e(x_e) = 1$ of edges $(1,3)$ and $(2, 4)$ become affine cost functions of the form $\ell_e(x_e) = x_e/2 + 1$.
+What is the impact on the optimal solutions $x^{UE}$ and $x^{S0}$ ? Comment.
+"""
+
+# ╔═╡ 3d0d3306-b9c2-48cb-9646-d4d8a6550ccc
+function create_network_Q8()
+	network = Network()
+
+	add_vertex_with_data!(network, inflow=1)
+	add_vertex_with_data!(network, inflow=0)
+	add_vertex_with_data!(network, inflow=0)
+	add_vertex_with_data!(network, inflow=-1)
+
+	add_edge_with_data!(network, 1, 2, a=1, b=0)
+	add_edge_with_data!(network, 1, 3, a=0.5, b=1)  # a changed
+	add_edge_with_data!(network, 2, 4, a=0.5, b=1)  # a changed
+	add_edge_with_data!(network, 3, 4, a=1, b=0)
+	
+	add_edge_with_data!(network, 2, 3, a=0, b=0)  # additional edge
+	add_edge_with_data!(network, 3, 2, a=0, b=0)  # additional edge
+
+	return network
+end
+
+# ╔═╡ f18720e8-4aba-4d9f-8503-f711500790a6
+network8 = create_network_Q8()
+
+# ╔═╡ aecc372f-26ca-4b84-95cd-1b00d344018e
+price_of_anarchy(network8)
+
+# ╔═╡ 71ce1df5-d449-4486-b2fe-53c0ed8fa20a
+md"""
+## Question 9
+
+Create a random constructor for the previous graph, where coefficients $a_e$ and $b_e$ are drawn uniformly in $[0, 1]$ for each edge $e$.
+Plot a histogram of the price of anarchy over $100$ samples.
+Which result from the course do we observe ?
+"""
+
+# ╔═╡ d1632c41-63da-4e1f-a5cc-e2f535c48b0d
+function random_network_Q9()
+	network = Network()
+
+	add_vertex_with_data!(network, inflow=1)
+	add_vertex_with_data!(network, inflow=0)
+	add_vertex_with_data!(network, inflow=0)
+	add_vertex_with_data!(network, inflow=-1)
+
+	for (s, d) in [(1, 2), (1, 3), (2, 4), (3, 4), (2, 3), (3, 2)]
+		add_edge_with_data!(network, s, d; a=rand(), b=rand())
+	end
+
+	return network
+end
+
+# ╔═╡ 6ba2a7e6-6e8e-4294-9f89-74312305d9e4
+begin
+	poa_list9 = Float64[]
+	@progress for _ = 1:100
+		network9 = random_network_Q9()
+		poa9 = price_of_anarchy(network9; verbose=false)
+		push!(poa_list9, poa9)
+	end
+end
+
+# ╔═╡ 20f09bb9-24b5-432e-8249-267a435e492c
+histogram(
+	poa_list9, bins=20,
+	xlabel="Price of anarchy", ylabel="Frequency", label=nothing
+)
+
+# ╔═╡ 7092e0f0-2276-4f37-96a7-694bfdf94545
+md"""
+## Question 10
+
+Adapt the code to handle cost functions of the form $\ell_e(x_e) = a_e(1+\tfrac{15}{100}(x_e/b_e)^4)$.
+Plot a histogram of the price of anarchy over $100$ random samples of $(a_e, b_e)$. Comment.
+"""
+
+# ╔═╡ a60a0f59-bc49-4aa5-9388-287886deb8cc
+function solve_optimization_Q10(network::Network; goal)
+	G = network.G
+	vertex_data = network.vertex_data
+	edge_data = network.edge_data
+
+    model = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0))
+    
+    @variable(model, x[1:ne(G)] >= 0)
+    @variable(model, edge_costs[1:ne(G)])
+	
+    N = build_incidence_matrix(network)
+    inflow = [vertex_data[v].inflow for v in 1:nv(G)]
+	@constraint(model, N * x .+ inflow .== 0)
+
+	for (j, e) in enumerate(edges(G))
+		s, d = src(e), dst(e)
+		a, b = edge_data[(s, d)].a, edge_data[(s, d)].b
+		if goal == :social_optimum
+        	@NLconstraint(
+				model, edge_costs[j] == a * x[j] + (0.15 / b^4) * x[j]^5
+			)
+		elseif goal == :user_equilibrium
+        	@NLconstraint(
+				model, edge_costs[j] == a * x[j] + (0.15 / b^4) * x[j]^5 / 5
+			)
+		end
+	end
+
+    @NLobjective(model, Min, sum(edge_costs[j] for j in 1:ne(G)))
+
+    optimize!(model)
+    
+    x_opt = round.(value.(x), digits=3)
+    
+    return x_opt
+end
+
+# ╔═╡ 52c21596-8653-4eb4-85b4-4ec5ea03d49a
+function social_cost_Q10(network::Network, x)
+	G = network.G
+	edge_data = network.edge_data
+    cost = 0.
+	for (j, e) in enumerate(edges(G))
+		s, d = src(e), dst(e)
+		a, b = edge_data[(s, d)].a, edge_data[(s, d)].b
+		cost += a * x[j] + (0.15 / b^4) * x[j]^5
+    end
+    return cost
+end
+
+# ╔═╡ c68ddc62-54c2-4ed6-9ebb-f835f768897c
+function price_of_anarchy_Q10(network::Network; verbose=true)
+	x_so = solve_optimization_Q10(network; goal=:social_optimum)
+	x_ue = solve_optimization_Q10(network; goal=:user_equilibrium)
+	C_so = social_cost_Q10(network, x_so)
+	C_ue = social_cost_Q10(network, x_ue)
+	poa = C_ue / C_so
+	verbose && @info "User equilibrium: $x_ue"
+	return poa
+end
+
+# ╔═╡ 23b77db3-0809-4830-93e1-56726d5a6092
+begin
+	poa_list10 = Float64[]
+	@progress for _ = 1:100
+		network10 = random_network_Q9()
+		poa10 = price_of_anarchy(network10; verbose=false)
+		push!(poa_list10, poa10)
+	end
+end
+
+# ╔═╡ bb4b68a8-2698-4f1b-9511-302bc29f9720
+histogram(
+	poa_list10, bins=20,
+	xlabel="Price of anarchy", ylabel="Frequency", label=nothing
+)
 
 # ╔═╡ a2882bc0-0aa2-4cbf-a494-05c7578e3a9d
 md"""
@@ -403,7 +590,41 @@ md"""
 """
 
 # ╔═╡ 440f0f4a-2810-4260-8fa9-6d11152e0f68
+md"""
+## Question 11
 
+Construct a graph with $6$ nodes.
+Define linear costs on each edge. 
+Compute the price of anarchy.
+"""
+
+# ╔═╡ e81f1a4c-f429-49e4-93aa-f5ee04308626
+md"""
+## Question 12 
+
+On your new graph, check whether it is possible to add an edge with null cost that increases the cost of the user equilibrium.
+"""
+
+# ╔═╡ 72ef1699-eb6e-4afa-9bc8-ec0a285d3799
+md"""
+## Question 13
+
+By introducing edge-flow variables $x^1$ and $x^2$, rewrite the problems $(P^{S0})$ and $(P^{UE})$ in the case where $K=2$. 
+Construct an example on your previous graph and compute the price of anarchy.
+"""
+
+# ╔═╡ 345edbfb-40d0-4321-be29-8938a0a99bce
+md"""
+# Another optimization library
+"""
+
+# ╔═╡ 1403b2b2-c7c7-499b-a821-1c31ac7c5c0b
+md"""
+## Question 14
+
+Try to solve the same optimization problems with the [Convex.jl](https://jump.dev/Convex.jl/stable/) package instead.
+What are the main differences with JuMP.jl?
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -411,17 +632,18 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 Ipopt = "b6b21f68-93f8-5de0-b562-5493be1d77c9"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
-MetaGraphsNext = "fa8bd995-216d-47f1-8a91-f3b68fbeb377"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+ProgressLogging = "33c8b6b6-d38a-422a-b730-caa89a2f386c"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 Graphs = "~1.6.0"
 Ipopt = "~1.0.2"
 JuMP = "~0.23.2"
-MetaGraphsNext = "~0.2.0"
 Plots = "~1.27.0"
 PlutoUI = "~0.7.37"
+ProgressLogging = "~0.1.4"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -490,9 +712,9 @@ version = "0.5.1"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "c9a6160317d1abe9c44b3beb367fd448117679ca"
+git-tree-sha1 = "9950387274246d08af38f6eef8cb5480862a435f"
 uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-version = "1.13.0"
+version = "1.14.0"
 
 [[deps.ChangesOfVariables]]
 deps = ["ChainRulesCore", "LinearAlgebra", "Test"]
@@ -625,12 +847,6 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "d8a578692e3077ac998b50c0217dfd67f21d1e5f"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.0+0"
-
-[[deps.FileIO]]
-deps = ["Pkg", "Requires", "UUIDs"]
-git-tree-sha1 = "80ced645013a5dbdc52cf70329399c35ce007fae"
-uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
-version = "1.13.0"
 
 [[deps.FixedPointNumbers]]
 deps = ["Statistics"]
@@ -797,12 +1013,6 @@ git-tree-sha1 = "a3f24677c21f5bbe9d2a714f95dcd58337fb2856"
 uuid = "82899510-4779-5014-852e-03e436cf321d"
 version = "1.0.0"
 
-[[deps.JLD2]]
-deps = ["FileIO", "MacroTools", "Mmap", "OrderedCollections", "Pkg", "Printf", "Reexport", "TranscodingStreams", "UUIDs"]
-git-tree-sha1 = "81b9477b49402b47fbe7f7ae0b252077f53e4a08"
-uuid = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-version = "0.4.22"
-
 [[deps.JLLWrappers]]
 deps = ["Preferences"]
 git-tree-sha1 = "abc9885a7ca2052a736a600f7fa66209f96506e1"
@@ -960,9 +1170,9 @@ uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 
 [[deps.MathOptInterface]]
 deps = ["BenchmarkTools", "CodecBzip2", "CodecZlib", "JSON", "LinearAlgebra", "MutableArithmetics", "OrderedCollections", "Printf", "SparseArrays", "Test", "Unicode"]
-git-tree-sha1 = "a62df301482a41cb7b1db095a4e6949ba7eb3349"
+git-tree-sha1 = "09be99195f42c601f55317bd89f3c6bbaec227dc"
 uuid = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
-version = "1.1.0"
+version = "1.1.1"
 
 [[deps.MbedTLS]]
 deps = ["Dates", "MbedTLS_jll", "Random", "Sockets"]
@@ -978,12 +1188,6 @@ uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
 git-tree-sha1 = "e498ddeee6f9fdb4551ce855a46f54dbd900245f"
 uuid = "442fdcdd-2543-5da2-b0f3-8c86c306513e"
 version = "0.3.1"
-
-[[deps.MetaGraphsNext]]
-deps = ["Graphs", "JLD2"]
-git-tree-sha1 = "f8e0351036278130f6bf966cb903e5fddb93778c"
-uuid = "fa8bd995-216d-47f1-8a91-f3b68fbeb377"
-version = "0.2.0"
 
 [[deps.Missings]]
 deps = ["DataAPI"]
@@ -1090,9 +1294,9 @@ version = "1.2.0"
 
 [[deps.Plots]]
 deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "GeometryBasics", "JSON", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "Pkg", "PlotThemes", "PlotUtils", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "UnicodeFun", "Unzip"]
-git-tree-sha1 = "9213b4c18b57b7020ee20f33a4ba49eb7bef85e0"
+git-tree-sha1 = "5f6e1309595e95db24342e56cd4dabd2159e0b79"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-version = "1.27.0"
+version = "1.27.3"
 
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
@@ -1113,6 +1317,12 @@ uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 [[deps.Profile]]
 deps = ["Printf"]
 uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
+
+[[deps.ProgressLogging]]
+deps = ["Logging", "SHA", "UUIDs"]
+git-tree-sha1 = "80d919dee55b9c50e8d9e2da5eeafff3fe58b539"
+uuid = "33c8b6b6-d38a-422a-b730-caa89a2f386c"
+version = "0.1.4"
 
 [[deps.Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
@@ -1135,9 +1345,9 @@ version = "1.2.1"
 
 [[deps.RecipesPipeline]]
 deps = ["Dates", "NaNMath", "PlotUtils", "RecipesBase"]
-git-tree-sha1 = "995a812c6f7edea7527bb570f0ac39d0fb15663c"
+git-tree-sha1 = "dc1e451e15d90347a7decc4221842a022b011714"
 uuid = "01d81517-befc-4cb6-b9ec-a95719d0359c"
-version = "0.5.1"
+version = "0.5.2"
 
 [[deps.Reexport]]
 git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
@@ -1205,9 +1415,9 @@ version = "2.1.4"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
-git-tree-sha1 = "6976fab022fea2ffea3d945159317556e5dad87c"
+git-tree-sha1 = "4f6ec5d99a28e1a749559ef7dd518663c5eca3d5"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.4.2"
+version = "1.4.3"
 
 [[deps.Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -1502,21 +1712,20 @@ version = "0.9.1+5"
 # ╔═╡ Cell order:
 # ╠═7b1cb992-a5ce-11ec-3eb2-ef7b56d0b3f6
 # ╠═a544ef87-05d9-4bda-9e93-551903b4b993
-# ╠═bc43ebee-2ed0-4255-bf2b-3352e53b5d92
+# ╟─bc43ebee-2ed0-4255-bf2b-3352e53b5d92
+# ╟─67a5a5d1-e9b2-4800-a71e-a8f631d480f3
 # ╟─c546cd21-700f-4c2a-931b-9647b345b454
+# ╟─304456e3-8ddd-496e-80aa-4df3e46d772c
 # ╟─de311c92-b521-404a-b42c-e39fdfbfae63
 # ╟─2b69da06-fb23-4268-a9d4-38525a7ac20c
-# ╠═927b5dde-31fd-4b3c-bb38-346f013673e5
+# ╟─59128377-7a05-4b40-9a1b-91cea30d7a5b
+# ╟─927b5dde-31fd-4b3c-bb38-346f013673e5
+# ╟─b4ed607f-af8d-49fe-b19e-a207083245a9
 # ╟─a7b1d5df-9c7c-4ee0-90a5-f41d94c32dad
-# ╠═95fbe82f-0f7e-40ed-acbd-70e26c9e2a59
 # ╟─1a2e2b25-8103-4c64-863a-bab9377531c1
-# ╠═7c9db9af-5511-44bf-96a3-43fa1187ebe9
 # ╟─f6db4c0a-a17c-4996-82d8-91bf1decd492
-# ╠═64a87650-3601-42e1-bd35-ff4227afe651
 # ╟─9be537f0-9740-4af6-9367-6db7f99ae89e
-# ╠═2e2d25d8-aff5-490d-b774-73132df80932
 # ╟─e9072bbe-439c-4939-92fd-9ba80a4856d0
-# ╠═a0ee0bc1-79a4-4bc4-9438-4c2e26a50001
 # ╟─600475b1-d054-48ac-b162-b28af92b713b
 # ╟─a1dff897-fee1-40fb-8710-4c3ae3abdd4f
 # ╟─ef34ce22-b494-4ec6-940a-7a6c1869c518
@@ -1528,15 +1737,18 @@ version = "0.9.1+5"
 # ╟─32780d79-3a9e-4124-9ade-eb2b5756303e
 # ╠═a317b192-f6cf-4b9c-b75b-7eaad1c372ec
 # ╠═f95e3ddc-c187-4a7c-9604-c656f15967bb
+# ╟─315c0821-442d-4a20-ac42-1442e1f37142
 # ╠═eaeef73e-846f-4da9-9510-52f38bcf0976
 # ╟─4ed50233-cc44-49f1-a82f-d2cf2d7df034
 # ╠═4b75fb3b-9cd1-4f1d-96f2-ea3f7fd79daf
-# ╠═f78a3ac2-c2ae-4e0f-9538-27ed72105c05
+# ╟─f78a3ac2-c2ae-4e0f-9538-27ed72105c05
+# ╟─e26709a3-3e44-4b8b-9c03-6cdd720144c7
 # ╠═29c0a166-0aaa-4cbb-8f5c-69f5f5c03e00
 # ╠═38910d08-ab48-46bc-a0ec-814058c6e114
 # ╠═427e627e-cc6c-4fb0-9f54-f89d7827791e
-# ╠═56d0e067-ab56-4fc2-9d78-2d971b8f1455
+# ╟─56d0e067-ab56-4fc2-9d78-2d971b8f1455
 # ╠═68411bd0-bbbd-4058-beca-103fc9e79e75
+# ╟─bae0d516-6db6-4d41-9e3c-ce89d4e9dfaa
 # ╠═50ac4e5d-11cb-4caa-b0dd-dabad26d87d6
 # ╠═fd786978-3ea2-482f-80c5-604c72decbe4
 # ╠═82dd92aa-d117-4088-abfb-dd7f5dfaa305
@@ -1544,14 +1756,33 @@ version = "0.9.1+5"
 # ╠═30231615-1b22-4a26-a0a8-5900ac98d7e9
 # ╠═5d1f806a-b9f6-405e-bc0b-baddeec76613
 # ╠═3fa1fbc8-f675-4f9a-ab0b-15a1521a614a
+# ╟─0e0a3d5b-fcc1-46f2-be12-3e9333e5c9bc
 # ╠═62d58c18-312e-4572-acad-9efb00b43a94
-# ╠═a00ca5f9-df62-42e7-804c-ea8f63a9aa9e
-# ╠═e1fe6274-aabd-4fd3-a04a-39e293678e23
+# ╠═d95c1cf4-5cbf-483d-9927-ae523ede6dc5
 # ╠═afd6c239-00cc-415c-b225-ec70105fd5bb
+# ╠═a223b9f7-d972-41fb-a931-8f40e5fed498
 # ╠═468e1a8a-d906-4b8f-8399-7a733485058d
-# ╠═25e0cf3d-b598-4d14-b789-ef25fa3ae454
 # ╠═c25c4e8b-1fa5-44b5-9cdc-fdbda681fbf3
-# ╠═a2882bc0-0aa2-4cbf-a494-05c7578e3a9d
-# ╠═440f0f4a-2810-4260-8fa9-6d11152e0f68
+# ╟─7d3c6b05-6449-4ca0-bc0c-2acccdce6584
+# ╟─4f827a72-49e7-43e0-9745-c63bdbf29c4b
+# ╠═3d0d3306-b9c2-48cb-9646-d4d8a6550ccc
+# ╠═f18720e8-4aba-4d9f-8503-f711500790a6
+# ╠═aecc372f-26ca-4b84-95cd-1b00d344018e
+# ╟─71ce1df5-d449-4486-b2fe-53c0ed8fa20a
+# ╠═d1632c41-63da-4e1f-a5cc-e2f535c48b0d
+# ╠═6ba2a7e6-6e8e-4294-9f89-74312305d9e4
+# ╠═20f09bb9-24b5-432e-8249-267a435e492c
+# ╟─7092e0f0-2276-4f37-96a7-694bfdf94545
+# ╠═a60a0f59-bc49-4aa5-9388-287886deb8cc
+# ╠═52c21596-8653-4eb4-85b4-4ec5ea03d49a
+# ╠═c68ddc62-54c2-4ed6-9ebb-f835f768897c
+# ╠═23b77db3-0809-4830-93e1-56726d5a6092
+# ╠═bb4b68a8-2698-4f1b-9511-302bc29f9720
+# ╟─a2882bc0-0aa2-4cbf-a494-05c7578e3a9d
+# ╟─440f0f4a-2810-4260-8fa9-6d11152e0f68
+# ╟─e81f1a4c-f429-49e4-93aa-f5ee04308626
+# ╟─72ef1699-eb6e-4afa-9bc8-ec0a285d3799
+# ╟─345edbfb-40d0-4321-be29-8938a0a99bce
+# ╟─1403b2b2-c7c7-499b-a821-1c31ac7c5c0b
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
