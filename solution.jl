@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.4
+# v0.19.4
 
 using Markdown
 using InteractiveUtils
@@ -12,8 +12,26 @@ begin
 	using PlutoUI
 	using Plots
 	using ProgressLogging
-	using SparseArrays
 end
+
+# ╔═╡ a4d76f51-2801-4cb3-9929-a93dc4b2132b
+md"""
+!!! note "Getting started"
+	The tutorial you are reading is written in the [Julia](https://julialang.org/) programming language and presented as a [Pluto](https://github.com/fonsp/Pluto.jl) notebook.
+	If you are not familiar with this environment, please read my [introduction to Julia and Pluto](https://gdalle.github.io/IntroJulia/basics.html) before writing your first lines of code.
+
+	The [JuMP documentation](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/introduction/) is also a great resource for syntax basics, and it will help you understand how optimization problems are formulated and solved below.
+"""
+
+# ╔═╡ cebaf96f-09f9-4ce5-bec5-fb33fd4fabe2
+md"""
+We begin by importing the packages we need.
+"""
+
+# ╔═╡ 077d1eef-fdf9-4327-ac1b-7189129bead5
+md"""
+And we display a nice TOC on the side.
+"""
 
 # ╔═╡ a544ef87-05d9-4bda-9e93-551903b4b993
 PlutoUI.TableOfContents()
@@ -179,7 +197,7 @@ end
 
 # ╔═╡ 3e7e2935-5d7a-4072-a5b2-305ec7722afa
 md"""
-Each edge $e$ must contain the cost function $\ell_e$, which we take to be linear: $\ell_e(x_e) = a_e x_e + b_e$.
+Each edge $e$ must contain the parameters of the cost function $\ell_e$, which we take to be linear: $\ell_e(x_e) = a_e x_e + b_e$.
 """
 
 # ╔═╡ f10a9ab7-14d5-4a34-a208-f64496262b2f
@@ -200,23 +218,41 @@ Base.@kwdef struct Network
 	edge_data::Dict{Tuple{Int,Int},EdgeData} = Dict{Tuple{Int,Int},EdgeData}()
 end
 
+# ╔═╡ 67d180c5-8e40-4167-8a23-4e4bf49bd72b
+md"""
+If the variable `network` has type `Network`, then you cann access:
+- the underlying graph with `network.G`
+- the metadata of vertex `v` with `network.vertex_data[v]`
+- the metadata of edge `(u, v)` with `network.edge_data[(u, v)]`
+"""
+
 # ╔═╡ 32780d79-3a9e-4124-9ade-eb2b5756303e
 md"""
 ## Graph operations
 """
 
 # ╔═╡ a317b192-f6cf-4b9c-b75b-7eaad1c372ec
+"""
+	add_vertex_with_data!(network; inflow)
+
+Modify the network by adding a vertex with a given `inflow`.
+"""
 function add_vertex_with_data!(network::Network; inflow)
-	add_vertex!(network.G)
-	v = nv(network.G)
-	network.vertex_data[v] = VertexData(inflow=inflow)
+	add_vertex!(network.G)  # append a new vertex to the underlying graph
+	v = nv(network.G)  # its index is equal to the number of vertices in the graph (the new vertex is the last one)
+	network.vertex_data[v] = VertexData(inflow=inflow)  # define its metadata
 	return true
 end
 
 # ╔═╡ f95e3ddc-c187-4a7c-9604-c656f15967bb
+"""
+	add_edge_with_data!(network, s, d; a, b)
+
+Modify the network by adding the edge `(s, d)` with cost coefficients `a` and `b`.
+"""
 function add_edge_with_data!(network::Network, s, d; a, b)
-	add_edge!(network.G, s, d)
-	network.edge_data[(s, d)] = EdgeData(a=a, b=b)
+	add_edge!(network.G, s, d)  # add a new edge to the underlying graph
+	network.edge_data[(s, d)] = EdgeData(a=a, b=b)  # define its metadata
 	return true
 end
 
@@ -226,13 +262,18 @@ Since we know that the incidence matrix $N$ is sparse (with few non-zero coeffic
 """
 
 # ╔═╡ eaeef73e-846f-4da9-9510-52f38bcf0976
+"""
+	build_incidence_matrix(network)
+
+Compute the binary incidence matrix of the network graph.
+"""
 function build_incidence_matrix(network::Network)
 	G = network.G
-    N = spzeros(Int,(nv(G), ne(G)))
+    N = zeros(Int,(nv(G), ne(G)))
     for (j, e) in enumerate(edges(G))
-		s, d = src(e), dst(e)
-        N[s, j] = -1 
-        N[d, j] = 1
+		s, d = src(e), dst(e)  #  edge e goes from source s to destination d
+        N[s, j] = -1  # negative coefficient for the source
+        N[d, j] = 1  # positive coefficient for the destination
     end
     return N
 end
@@ -243,13 +284,16 @@ md"""
 """
 
 # ╔═╡ 4b75fb3b-9cd1-4f1d-96f2-ea3f7fd79daf
+"""
+	plot_network(network; vx, vy)
+
+Visualize the network with vertex coordinates `vx` and `vy`.
+"""
 function plot_network(network::Network; vx, vy)
 	G = network.G
 	vertex_data = network.vertex_data
-
 	# Vertices
     plt = scatter(vx, vy, label=nothing, text = 1:nv(G))
-
 	# Edges
 	for e in edges(G)
 		s, d = src(e), dst(e)
@@ -258,7 +302,6 @@ function plot_network(network::Network; vx, vy)
 			plt, [x_s, x_d], [y_s, y_d], color="black", arrow=true, label=nothing
 		)
     end
-
 	return plt
 end
 
@@ -269,44 +312,65 @@ md"""
 
 # ╔═╡ e26709a3-3e44-4b8b-9c03-6cdd720144c7
 md"""
-To solve nonlinear optimization problems, we will use the [JuMP.jl](https://jump.dev/JuMP.jl/stable/) package with the Ipopt backend.
+To solve nonlinear optimization problems, we will use the [JuMP.jl](https://jump.dev/JuMP.jl/stable/) package with the [Ipopt.jl](https://github.com/jump-dev/Ipopt.jl) backend.
 """
 
 # ╔═╡ 29c0a166-0aaa-4cbb-8f5c-69f5f5c03e00
+"""
+	solve_optimization(network; goal)
+
+If `goal == :social_optimum`, find the globally optimal flow by minimizing the sum of user costs.
+If `goal == :user_equilibrium`, find the game-theoretical equilibrium by minimizing the Wardrop potential.
+"""
 function solve_optimization(network::Network; goal)
 	G = network.G
 	vertex_data = network.vertex_data
 	edge_data = network.edge_data
 
+	# We start by creating a model and choosing the solver
     model = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level" => 0))
-
-    @variable(model, x[1:ne(G)] >= 0)
-    @variable(model, edge_costs[1:ne(G)])
 	
-    N = build_incidence_matrix(network)
+	# We add decision variables by specifying their dimension
+    @variable(model, x[1:ne(G)])
+    @variable(model, edge_costs[1:ne(G)])
+
+	# We add constraints on these variables
+	@constraint(model, x[1:ne(G)] .>= 0)  #  positive flow
+    
+	N = build_incidence_matrix(network)
     inflow = [vertex_data[v].inflow for v in 1:nv(G)]
-	@constraint(model, N * x .+ inflow .== 0)
+	@constraint(model, N * x .+ inflow .== 0)  # Kirchhoff's law
 
 	for (j, e) in enumerate(edges(G))
 		s, d = src(e), dst(e)
 		a, b = edge_data[(s, d)].a, edge_data[(s, d)].b
 		if goal == :social_optimum
+			# The objective is the sum of individual costs
         	@NLconstraint(model, edge_costs[j] == a * x[j]^2 + b * x[j])
 		elseif goal == :user_equilibrium
+			# The objective is the Wardrop potential
         	@NLconstraint(model, edge_costs[j] == a * x[j]^2 / 2 + b * x[j])
 		end
 	end
 
+	# We define the objective as a sum of costs to minimize
     @NLobjective(model, Min, sum(edge_costs[j] for j in 1:ne(G)))
 
+	# Here is where the computation actually happens
     optimize!(model)
-    
+
+	# We recover the variable value and round it for display purposes
     x_opt = round.(value.(x), digits=3)
     
     return x_opt
 end
 
 # ╔═╡ 38910d08-ab48-46bc-a0ec-814058c6e114
+"""
+	social_cost(network, x)
+
+Compute the social cost based on a flow solution `x` to the optimization problem
+"""
 function social_cost(network::Network, x)
 	G = network.G
 	edge_data = network.edge_data
@@ -320,6 +384,11 @@ function social_cost(network::Network, x)
 end
 
 # ╔═╡ 427e627e-cc6c-4fb0-9f54-f89d7827791e
+"""
+	price_of_anarchy(network; verbose)
+
+Compare the social optimum and user equilibrium on the network to deduce the price of anarchy.
+"""
 function price_of_anarchy(network::Network; verbose=true)
 	x_so = solve_optimization(network; goal=:social_optimum)
 	x_ue = solve_optimization(network; goal=:user_equilibrium)
@@ -336,18 +405,23 @@ md"""
 """
 
 # ╔═╡ 68411bd0-bbbd-4058-beca-103fc9e79e75
+"""
+	diamond_network()
+
+Build the basic network on which the Braess paradox can be observed.
+"""
 function diamond_network()
 	network = Network()
 
-	add_vertex_with_data!(network, inflow=1)
-	add_vertex_with_data!(network, inflow=0)
-	add_vertex_with_data!(network, inflow=0)
-	add_vertex_with_data!(network, inflow=-1)
+	add_vertex_with_data!(network, inflow=1)  # add vertex n°1 (left)
+	add_vertex_with_data!(network, inflow=0)  # add vertex n°2 (top)
+	add_vertex_with_data!(network, inflow=0)  # add vertex n°3 (bottom)
+	add_vertex_with_data!(network, inflow=-1)  # add vertex n°4 (right)
 
-	add_edge_with_data!(network, 1, 2, a=1, b=0)
-	add_edge_with_data!(network, 1, 3, a=0, b=1)
-	add_edge_with_data!(network, 2, 4, a=0, b=1)
-	add_edge_with_data!(network, 3, 4, a=1, b=0)
+	add_edge_with_data!(network, 1, 2, a=1, b=0)  # add edge (1, 2)
+	add_edge_with_data!(network, 1, 3, a=0, b=1)  # add edge (1, 3)
+	add_edge_with_data!(network, 2, 4, a=0, b=1)  # add edge (2, 4)
+	add_edge_with_data!(network, 3, 4, a=1, b=0)  # add edge (3, 4)
 
 	return network
 end
@@ -502,7 +576,7 @@ histogram(
 md"""
 ## Question 10
 
-Adapt the code to handle cost functions of the form $\ell_e(x_e) = a_e(1+\tfrac{15}{100}(x_e/b_e)^4)$.
+Adapt the code to handle cost functions of the form $\ell_e(x_e) = a_e(1+\tfrac{15}{100}(x_e/b_e)^4)$, which is standard to measure the congestion.
 Plot a histogram of the price of anarchy over $100$ random samples of $(a_e, b_e)$. Comment.
 """
 
@@ -586,7 +660,7 @@ histogram(
 
 # ╔═╡ a2882bc0-0aa2-4cbf-a494-05c7578e3a9d
 md"""
-# More complex graphs
+# More complex settings
 """
 
 # ╔═╡ 440f0f4a-2810-4260-8fa9-6d11152e0f68
@@ -609,21 +683,8 @@ On your new graph, check whether it is possible to add an edge with null cost th
 md"""
 ## Question 13
 
-By introducing edge-flow variables $x^1$ and $x^2$, rewrite the problems $(P^{S0})$ and $(P^{UE})$ in the case where $K=2$. 
+By introducing edge-flow variables $x^1$ and $x^2$, rewrite the problems $(P^{SO})$ and $(P^{UE})$ in the case where $K=2$. 
 Construct an example on your previous graph and compute the price of anarchy.
-"""
-
-# ╔═╡ 345edbfb-40d0-4321-be29-8938a0a99bce
-md"""
-# Another optimization library
-"""
-
-# ╔═╡ 1403b2b2-c7c7-499b-a821-1c31ac7c5c0b
-md"""
-## Question 14
-
-Try to solve the same optimization problems with the [Convex.jl](https://jump.dev/Convex.jl/stable/) package instead.
-What are the main differences with JuMP.jl?
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -635,7 +696,6 @@ JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 ProgressLogging = "33c8b6b6-d38a-422a-b730-caa89a2f386c"
-SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 Graphs = "~1.6.0"
@@ -1326,9 +1386,9 @@ version = "0.1.4"
 
 [[deps.Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
-git-tree-sha1 = "ad368663a5e20dbb8d6dc2fddeefe4dae0781ae8"
+git-tree-sha1 = "c6c0f690d0cc7caddb74cef7aa847b824a16b256"
 uuid = "ea2cea3b-5b76-57ae-a6ef-0a8af62496e1"
-version = "5.15.3+0"
+version = "5.15.3+1"
 
 [[deps.REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
@@ -1710,7 +1770,10 @@ version = "0.9.1+5"
 """
 
 # ╔═╡ Cell order:
+# ╟─a4d76f51-2801-4cb3-9929-a93dc4b2132b
+# ╟─cebaf96f-09f9-4ce5-bec5-fb33fd4fabe2
 # ╠═7b1cb992-a5ce-11ec-3eb2-ef7b56d0b3f6
+# ╟─077d1eef-fdf9-4327-ac1b-7189129bead5
 # ╠═a544ef87-05d9-4bda-9e93-551903b4b993
 # ╟─bc43ebee-2ed0-4255-bf2b-3352e53b5d92
 # ╟─67a5a5d1-e9b2-4800-a71e-a8f631d480f3
@@ -1734,6 +1797,7 @@ version = "0.9.1+5"
 # ╠═f10a9ab7-14d5-4a34-a208-f64496262b2f
 # ╟─1cc81642-b941-42ff-9a7d-36e7ffb9617f
 # ╠═d9560fd1-57c7-46b8-91b1-ae3613df000d
+# ╟─67d180c5-8e40-4167-8a23-4e4bf49bd72b
 # ╟─32780d79-3a9e-4124-9ade-eb2b5756303e
 # ╠═a317b192-f6cf-4b9c-b75b-7eaad1c372ec
 # ╠═f95e3ddc-c187-4a7c-9604-c656f15967bb
@@ -1782,7 +1846,5 @@ version = "0.9.1+5"
 # ╟─440f0f4a-2810-4260-8fa9-6d11152e0f68
 # ╟─e81f1a4c-f429-49e4-93aa-f5ee04308626
 # ╟─72ef1699-eb6e-4afa-9bc8-ec0a285d3799
-# ╟─345edbfb-40d0-4321-be29-8938a0a99bce
-# ╟─1403b2b2-c7c7-499b-a821-1c31ac7c5c0b
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
