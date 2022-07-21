@@ -396,7 +396,7 @@ function price_of_anarchy(network::Network; verbose=true)
 	C_so = social_cost(network, x_so)
 	C_ue = social_cost(network, x_ue)
 	poa = C_ue / C_so
-	verbose && @info "User equilibrium: $x_ue"
+	verbose && @info "User equilibrium" x_ue collect(edges(network.G))
 	return poa
 end
 
@@ -436,6 +436,9 @@ md"""
 
 Compute the price of anarchy in a diamond network. Comment the result.
 """
+
+# ╔═╡ 0fc9cc62-0bbd-43aa-a2a1-35edc76c3462
+price_of_anarchy(diamond_network())
 
 # ╔═╡ 0e0a3d5b-fcc1-46f2-be12-3e9333e5c9bc
 md"""
@@ -1633,6 +1636,7 @@ version = "0.9.1+5"
 # ╠═68411bd0-bbbd-4058-beca-103fc9e79e75
 # ╠═f897a71d-105d-4982-b12f-60d0ad8c0702
 # ╟─bae0d516-6db6-4d41-9e3c-ce89d4e9dfaa
+# ╠═0fc9cc62-0bbd-43aa-a2a1-35edc76c3462
 # ╟─0e0a3d5b-fcc1-46f2-be12-3e9333e5c9bc
 # ╟─7d3c6b05-6449-4ca0-bc0c-2acccdce6584
 # ╟─4f827a72-49e7-43e0-9745-c63bdbf29c4b
