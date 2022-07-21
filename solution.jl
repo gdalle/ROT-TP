@@ -256,6 +256,11 @@ function add_edge_with_data!(network::Network, s, d; a, b)
 	return true
 end
 
+# ╔═╡ 59f864ae-01ef-4225-be06-622740766c74
+function modify_edge_data!(network, s, d; a, b)
+	network.edge_data[(s, d)] = EdgeData(a=a, b=b)
+end
+
 # ╔═╡ 315c0821-442d-4a20-ac42-1442e1f37142
 md"""
 Since we know that the incidence matrix $N$ is sparse (with few non-zero coefficients), a dedicated structure allows for faster computations.
@@ -395,7 +400,7 @@ function price_of_anarchy(network::Network; verbose=true)
 	C_so = social_cost(network, x_so)
 	C_ue = social_cost(network, x_ue)
 	poa = C_ue / C_so
-	verbose && @info "User equilibrium: $x_ue"
+	verbose && @info "User equilibrium" x_ue collect(edges(network.G))
 	return poa
 end
 
@@ -468,12 +473,14 @@ md"""
 begin
 	network7a = diamond_network()
 	add_edge_with_data!(network7a, 2, 3, a=0, b=0)
+	price_of_anarchy(network7a)
 end
 
 # ╔═╡ d95c1cf4-5cbf-483d-9927-ae523ede6dc5
 begin
 	network7b = diamond_network()
 	add_edge_with_data!(network7b, 3, 2, a=0, b=0)
+	price_of_anarchy(network7b)
 end
 
 # ╔═╡ afd6c239-00cc-415c-b225-ec70105fd5bb
@@ -481,16 +488,8 @@ begin
 	network7c = diamond_network()
 	add_edge_with_data!(network7c, 2, 3, a=0, b=0)
 	add_edge_with_data!(network7c, 3, 2, a=0, b=0)
+	price_of_anarchy(network7c)
 end
-
-# ╔═╡ a223b9f7-d972-41fb-a931-8f40e5fed498
-price_of_anarchy(network7a)
-
-# ╔═╡ 468e1a8a-d906-4b8f-8399-7a733485058d
-price_of_anarchy(network7b)
-
-# ╔═╡ c25c4e8b-1fa5-44b5-9cdc-fdbda681fbf3
-price_of_anarchy(network7c)
 
 # ╔═╡ 7d3c6b05-6449-4ca0-bc0c-2acccdce6584
 md"""
@@ -1801,6 +1800,7 @@ version = "0.9.1+5"
 # ╟─32780d79-3a9e-4124-9ade-eb2b5756303e
 # ╠═a317b192-f6cf-4b9c-b75b-7eaad1c372ec
 # ╠═f95e3ddc-c187-4a7c-9604-c656f15967bb
+# ╠═59f864ae-01ef-4225-be06-622740766c74
 # ╟─315c0821-442d-4a20-ac42-1442e1f37142
 # ╠═eaeef73e-846f-4da9-9510-52f38bcf0976
 # ╟─4ed50233-cc44-49f1-a82f-d2cf2d7df034
@@ -1824,9 +1824,6 @@ version = "0.9.1+5"
 # ╠═62d58c18-312e-4572-acad-9efb00b43a94
 # ╠═d95c1cf4-5cbf-483d-9927-ae523ede6dc5
 # ╠═afd6c239-00cc-415c-b225-ec70105fd5bb
-# ╠═a223b9f7-d972-41fb-a931-8f40e5fed498
-# ╠═468e1a8a-d906-4b8f-8399-7a733485058d
-# ╠═c25c4e8b-1fa5-44b5-9cdc-fdbda681fbf3
 # ╟─7d3c6b05-6449-4ca0-bc0c-2acccdce6584
 # ╟─4f827a72-49e7-43e0-9745-c63bdbf29c4b
 # ╠═3d0d3306-b9c2-48cb-9646-d4d8a6550ccc
