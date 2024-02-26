@@ -19,8 +19,6 @@ md"""
 !!! note "Getting started"
 	The tutorial you are reading is written in the [Julia](https://julialang.org/) programming language and presented as a [Pluto](https://github.com/fonsp/Pluto.jl) notebook.
 
-	If you are not familiar with this environment, please read my [introduction to Julia and Pluto](https://gdalle.github.io/IntroJulia/basics.html) before writing your first lines of code. This is especially important because Pluto is *reactive* and has no notion of execution order: if you are used to Jupyter, you are in for a surprise.
-
 	The [JuMP documentation](https://jump.dev/JuMP.jl/stable/tutorials/getting_started/introduction/) is a good resource for syntax basics, and it will help you understand how optimization problems are formulated and solved below.
 """
 
